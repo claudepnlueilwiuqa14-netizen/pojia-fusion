@@ -121,7 +121,28 @@ v2 改成：起真 DSH host → 系统 Chrome 打开真前端 → Playwright 在
 
 ---
 
-## 七、安全说明
+## 七、通用记忆库接入（WorkBuddy 大记忆库 / SharedKB Obsidian 仓库）
+
+中枢 `C:\Users\qq\SharedKB`（本身就是 Obsidian 仓库）此前只接了 WorkBuddy 与 Codex：
+**DSH 换过去就失忆，DSH 的会话也从不进中枢**。本次两侧都补上（详见 `MEMORY_VAULT.md`）。
+
+- **读侧**（代理层新增 `vault_recall()` / `vault_preload()`，复用中枢现成的
+  `kb_recall.py` / `kb_preload.py`）：
+  真机抓到的**真实客户端请求包**里同时出现
+  `## 通用记忆库 · 本轮召回` ✅、`## 通用记忆库 · 开局铺底` ✅、`【破甲-强锚】` ✅、`下一步：` ✅。
+- **真机问答验证**：在真实 DSH 客户端问「我的中枢铁律有哪三条？下一步该干什么？」，
+  回复给出**进度回顾 + 三条铁律 + 下一步（决定 SharedKB 是否做成 Obsidian Vault）** ——
+  全部来自中枢笔记；客户端随后自己起工具去读中枢文件
+  （"正在运行命令 · Locate central memory files"），中枢铁律驱动的行为成立。
+- **写侧**（`kb_sync.py` 新增 `SRC_DSH` + `parse_dsh()` + `collect_dsh()`）：
+  DSH 会话是 zstd 压缩 JSONL，实测**扫到 301 个 DSH 会话全部导出**到 `记录\DeepSeek\YYYY-MM\`，
+  带会话标题/时间戳/用户与助手消息。DSH 会话从此进入中枢，记忆越用越厚。
+- `kb_recall.py` 的 `autosync()` 会在 DSH 发请求时顺手触发归档（5 分钟节流），
+  所以只要 DSH 在用，中枢就在自动同步。
+
+---
+
+## 八、安全说明
 
 发布副本中的真实 Key 全部替换为占位符（`sk-RELAY_12300_API_KEY` /
 `sk-RELAX_SCXAI_API_KEY` / `sk-POOL_KEY`），诊断文件与原始会话抓包

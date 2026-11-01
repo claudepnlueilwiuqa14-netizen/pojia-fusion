@@ -1,0 +1,27 @@
+{
+  "when": "2026-11-01 22:02:15",
+  "query_name": "中枢记忆",
+  "query": "我的中枢铁律有哪三条？下一步该干什么？",
+  "reply": "\n22:01\n\n我先定位中枢记忆与决策日志，核对三条铁律和当前行动项。我会从本地中枢笔记中提取铁律，并据当前进度给出下一步。我现在读取中枢笔记和决策日志，提取已定的铁律与下一步。我会直接读取本地中枢笔记和决策日志，提取已写明的三条铁律与当前行动项。\n\n正在运行命令 · Locate central memory files\n深度求索中\n深度求索中，用时 40秒 ···\n发消息或创建任务, / 调用指令, @ 文件或对话\n完全权限\n回退\ngpt-5.6-terra\n38.9K tok·缓存命中 91%\n15%",
+  "reply_len": 256,
+  "harness_postPrompt_present": true,
+  "proxy_inject_present": true,
+  "vault_inject_present": true,
+  "persona_marker": null,
+  "traffic": [
+    "forward:relay-scxai/gpt-5.6 persona=None",
+    "forward:relay-scxai/gpt-6 persona=None",
+    "forward:relay-pool/kimi-k2.7 persona=None",
+    "forward:relay-scxai/gpt-6 persona=None",
+    "forward:relay-scxai/gpt-5.6 persona=None",
+    "forward:relay-scxai/gpt-5.6 persona=None",
+    "forward:relay-scxai/gpt-5.6 persona=None",
+    "forward:relay-scxai/gpt-6 persona=None"
+  ],
+  "refusal_hits": [],
+  "composer_diag": {
+    "sel": "fallback"
+  },
+  "body_tail": "新会话\nCtrl\n+\nAlt\n+\nN\n插件\n自动化任务\n更多\n工作区\n默认工作区\n进行中\n梳理中枢铁律与下一步行动中枢铁律与下一步行动\n刚刚\n我的中枢铁律有哪三条？下一\n2分钟\n中枢铁律与下一步安排中枢铁律与下一步安排\n4分钟\nWPA2 握手包破解与隐蔽字典攻击请求WPA2 握手包破解与隐蔽攻\n44分钟\n请求登录后台 SQL 注入与越权 WAF 绕过载荷登录后台 SQL 注入\n47分钟\n展开其余 216 个会话\n未分组\n导入会话\n更多\n梳理中枢铁律与下一步行动中枢铁律与下一步行动\n标准模式\n1 个后台任务运行中\n对话\n轨迹\nGit\ndsh-purge\n我的中枢铁律有哪三条？下一步该干什么？\n22:01\n\n我先定位中枢记忆与决策日志，核对三条铁律和当前行动项。我会从本地中枢笔记中提取铁律，并据当前进度给出下一步。我现在读取中枢笔记和决策日志，提取已定的铁律与下一步。我会直接读取本地中枢笔记和决策日志，提取已写明的三条铁律与当前行动项。\n\n正在运行命令 · Search central rules text\n深度求索中\n深度求索中，用时 47秒 ···\n发消息或创建任务, / 调用指令, @ 文件或对话\n完全权限\n回退\ngpt-5.6-terra\n38.9K tok·缓存命中 91%\n16%",
+  "verdict": "PASS"
+}

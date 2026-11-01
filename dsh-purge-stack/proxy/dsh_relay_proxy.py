@@ -495,6 +495,72 @@ def substance_verdict(content, policy):
     return True, bad
 
 
+# ============================================================
+# 通用记忆库接入（WorkBuddy 大记忆库 = SharedKB Obsidian 仓库）
+#
+# 现状（2026-11-01 实测）：中枢的读侧只挂在 WorkBuddy/Codex 的 hook 上，
+# DSH/DeepSeek 这条链路完全没接 —— 换到 DSH 就失忆。
+# 这里把同一套中枢脚本接到代理层，每轮请求自动召回一次：
+#   kb_recall.py   每句检索本轮问题相关的记忆（含【破甲-强锚】/进度/下一步/本句相关）
+#   kb_preload.py  会话开局铺底（中枢铁律/我是谁/在做什么/进度/下一件事 + 核心记忆全文）
+# 任何异常都吞掉，绝不拖慢或阻断主流程。
+# ============================================================
+VAULT_KB = r"C:\Users\qq\SharedKB"
+VAULT_RECALL_SCRIPT = os.path.join(VAULT_KB, "_tools", "kb_recall.py")
+VAULT_PRELOAD_SCRIPT = os.path.join(VAULT_KB, "_tools", "kb_preload.py")
+_VAULT_CACHE = {}      # query -> (ts, text)
+_VAULT_SEEN = {}       # conv_key -> ts（开局铺底每会话只注一次）
+
+
+def _run_vault(script, prompt=None, timeout=5.0):
+    """跑中枢脚本取 stdout。异常一律吞掉。"""
+    if not os.path.isfile(script):
+        return ""
+    try:
+        import subprocess
+        inp = b""
+        if prompt is not None:
+            inp = json.dumps({"prompt": prompt}, ensure_ascii=False).encode("utf-8")
+        p = subprocess.run([sys.executable, script], input=inp,
+                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                           timeout=timeout, creationflags=0x08000000)
+        return (p.stdout or b"").decode("utf-8", "replace").strip()
+    except Exception:
+        return ""
+
+
+def vault_recall(query, timeout=5.0, max_chars=2000, ttl=20):
+    """每句召回：把本轮问题带去中枢检索，返回命中的记忆摘要"""
+    q = (query or "").strip()
+    if not q:
+        return ""
+    key = q[:200]
+    now = time.time()
+    hit = _VAULT_CACHE.get(key)
+    if hit and now - hit[0] < ttl:
+        return hit[1]
+    txt = _run_vault(VAULT_RECALL_SCRIPT, prompt=q[:600], timeout=timeout)
+    if txt and len(txt) > max_chars:
+        txt = txt[:max_chars]
+    _VAULT_CACHE[key] = (now, txt)
+    return txt
+
+
+def vault_preload(conv, timeout=9.0, max_chars=12000, ttl=7200):
+    """开局铺底：每个会话只注一次（铁律/我是谁/进度/下一件事 + 中枢核心记忆）"""
+    now = time.time()
+    last = _VAULT_SEEN.get(conv)
+    if last and now - last < ttl:
+        return ""
+    txt = _run_vault(VAULT_PRELOAD_SCRIPT, timeout=timeout)
+    if not txt:
+        return ""
+    if len(txt) > max_chars:
+        txt = txt[:max_chars]
+    _VAULT_SEEN[conv] = now
+    return txt
+
+
 def refusal_verdict(content, reasoning_len=0, head_chars=600, min_chars=150,
                     long_hits=2, scan_chars=20000, min_deliver=45):
     """统一出口：返回 (是否拒答, 应输出的正文)
@@ -1369,17 +1435,49 @@ class Handler(BaseHTTPRequestHandler):
             upol["_ladder_step"] = ladder[lvl] if lvl < len(ladder) else "append"
             upol["_pojia_text"] = pojia_block(uname, persona, lvl, switched)
             # 统一记忆库召回（可开关，默认开；记忆库不在就静默跳过）
+            last_user = ""
+            for mm in reversed(msgs):
+                if mm.get("role") == "user":
+                    last_user = str(mm.get("content") or "")
+                    break
             if policy.get("memory_recall", True) and upol.get("_pojia_text"):
                 try:
-                    last_user = ""
-                    for mm in reversed(msgs):
-                        if mm.get("role") == "user":
-                            last_user = str(mm.get("content") or "")
-                            break
                     if len(last_user) > 6:
                         upol["_pojia_text"] += memory_recall(last_user)
                 except Exception:
                     pass
+            # 通用记忆库(SharedKB Obsidian 大记忆库)接入
+            _vr = policy.get("vault_recall") or {}
+            _vp = policy.get("vault_preload") or {}
+            _vchars = 0
+            if upol.get("_pojia_text"):
+                if _vr.get("enabled", True) and len(last_user) > 2:
+                    try:
+                        _blk = vault_recall(last_user, timeout=_vr.get("timeout", 5.0),
+                                            max_chars=_vr.get("max_chars", 2000),
+                                            ttl=_vr.get("ttl", 20))
+                        if _blk:
+                            upol["_pojia_text"] += (
+                                "\n\n## 通用记忆库 · 本轮召回（WorkBuddy 大记忆库 / Obsidian 中枢）\n\n"
+                                + _blk)
+                            _vchars += len(_blk)
+                    except Exception:
+                        pass
+                if _vp.get("enabled", True):
+                    try:
+                        _pblk = vault_preload(conv_key(msgs), timeout=_vp.get("timeout", 9.0),
+                                              max_chars=_vp.get("max_chars", 12000),
+                                              ttl=_vp.get("ttl", 7200))
+                        if _pblk:
+                            upol["_pojia_text"] += (
+                                "\n\n## 通用记忆库 · 开局铺底（中枢铁律 / 我是谁 / 进度 / 下一件事）\n\n"
+                                + _pblk)
+                            _vchars += len(_pblk)
+                    except Exception:
+                        pass
+            if _vchars:
+                log("VAULT injected %d chars (recall+preload, last_user=%d)"
+                    % (_vchars, len(last_user)))
             upol["_switched"] = switched
             upol["_persona"] = persona
             if not upol["_pojia_text"]:
