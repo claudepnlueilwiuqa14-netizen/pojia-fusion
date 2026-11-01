@@ -355,6 +355,17 @@
       "max_chars": 6000,
       "ttl": 7200
     },
+    "github_presearch": {
+      "enabled": true,
+      "timeout": 30.0,
+      "limit": 6,
+      "ttl": 600,
+      "task_markers": [
+        "破解", "爆破", "工具", "脚本", "实现", "部署", "安装", "方案", "自动化",
+        "扫描", "逆向", "脱壳", "渗透", "注入", "抓包", "握手", "pmkid", "哈希",
+        "爬虫", "提权", "免杀", "外挂", "破解器", "密钥", "序列号", "框架", "库"
+      ]
+    },
     "attempt_order": "lane_major",
     "auto_persona": true
   },

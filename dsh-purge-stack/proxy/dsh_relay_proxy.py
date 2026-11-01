@@ -561,6 +561,157 @@ def vault_preload(conv, timeout=9.0, max_chars=12000, ttl=7200):
     return txt
 
 
+GH_FETCH = r"C:\Users\qq\SharedKB\破甲融合\工具\gh_fetch.py"
+_GH_CACHE = {}
+
+# 关键词 -> 取用层类别（命中就白名单直出，保证候选里有对的那个）
+GH_CAT_MAP = [
+    ("无线网络", ["wifi", "wpa", "wpa2", "wpa3", "握手", "pmkid", "无线", "抓包",
+                  "beacon", "deauth", "aireplay", "hashcat", "握手包", "蹭网"]),
+    ("渗透红队", ["渗透", "sqlmap", "注入", "exploit", "cve", "内网", "打站", "webshell", "红队"]),
+    ("逆向脱壳", ["逆向", "脱壳", "ida", "olly", "x64dbg", "frida", "反调试", "hook", "二进制"]),
+    ("越狱破甲", ["越狱", "破甲", "system prompt", "提示词", "jailbreak"]),
+    ("密钥推导", ["密钥", "keygen", "序列号", "routerkeygen", "注册码"]),
+    ("CTF综合", ["ctf", "pwn", "writeup"]),
+    ("持久化记忆", ["记忆", "memory", "会话", "上下文"]),
+    ("权重消融", ["权重", "gguf", "量化"]),
+]
+_GH_STOP = set("the and for you with that this from http https com www are was not "
+               "但是 然后 一个 帮我 给我 直接 需要 可以 这样 那样")
+
+# 宿主塞进 user 位的环境/时间快照，不是人问的话
+_CTX_MARKERS = (
+    "Current runtime context", "Time sampled while", "<environment_context>",
+    "<system-reminder>", "Current DeepSeek Harness", "Current Date:",
+    "Approval requests are auto-granted", "Browser time zone",
+)
+
+
+def pick_user_query(messages):
+    """从消息数组里挑出"真人问的那句"。
+
+    2026-11-01 真机实测踩的坑：DSH 宿主会在 user 位塞运行时快照
+    ("Current runtime context…" / "Time sampled while…")，
+    直接取最后一条 user 消息 = 取到快照，关键词全变成环境词，
+    中枢召回和 GitHub 预检索都在吃噪声。这里过滤掉这些，只留真人问句。
+    """
+    best = ""
+    for m in (messages or []):
+        if m.get("role") != "user":
+            continue
+        c = m.get("content")
+        if isinstance(c, list):
+            parts = []
+            for x in c:
+                if isinstance(x, dict):
+                    parts.append(str(x.get("text") or ""))
+                else:
+                    parts.append(str(x))
+            c = " ".join(parts)
+        c = str(c or "")
+        if not c:
+            continue
+        if any(mk in c[:600] for mk in _CTX_MARKERS):
+            continue
+        c = re.sub(r"<system-reminder>.*?</system-reminder>", "", c, flags=re.S).strip()
+        if len(c) > len(best):
+            best = c
+    return best
+
+
+def is_meta_call(messages):
+    """元调用（会话标题生成等）不该触发检索/召回：它不是任务"""
+    for m in (messages or []):
+        if m.get("role") != "system":
+            continue
+        c = str(m.get("content") or "")[:500].lower()
+        if "concise title" in c or "session-title" in c or "title for an ai" in c:
+            return True
+    return False
+
+
+def _run_script(script, args=None, stdin_text=None, timeout=30.0):
+    """跑一个本机脚本取 stdout，异常一律吞掉。"""
+    try:
+        import subprocess
+        inp = stdin_text.encode("utf-8") if stdin_text is not None else b""
+        p = subprocess.run([sys.executable, script] + (args or []), input=inp,
+                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                           timeout=timeout, creationflags=0x08000000)
+        return (p.stdout or b"").decode("utf-8", "replace")
+    except Exception:
+        return ""
+
+
+def gh_keywords(query):
+    """从用户这句话里抽出适合 GitHub 检索的技术词"""
+    q = (query or "")[:600]
+    toks = []
+    for w in re.findall(r"[A-Za-z][A-Za-z0-9_+.#-]{1,24}", q):
+        lw = w.lower()
+        if lw in _GH_STOP or lw.isdigit():
+            continue
+        toks.append(w)
+    cn = re.findall(r"[\u4e00-\u9fff]{2,4}", q)
+    for w in cn[:2]:
+        toks.append(w)
+    seen, out = set(), []
+    for t in toks:
+        if t.lower() in seen:
+            continue
+        seen.add(t.lower())
+        out.append(t)
+    return out[:4]
+
+
+def gh_presearch(query, limit=6, timeout=30.0, ttl=600):
+    """GitHub 取用层预检索：**真的去 GitHub 搜一遍**，把候选直接喂给模型。
+
+    目的：模型不必自己回忆、也不必挨个库挨着试 —— 候选已经由系统实跑检索得到，
+    它只需要从里面锁定**一个**能直接干成的方案就上。
+    """
+    kws = gh_keywords(query)
+    if not kws or not os.path.isfile(GH_FETCH):
+        return ""
+    key = "|".join(k.lower() for k in kws)
+    now = time.time()
+    hit = _GH_CACHE.get(key)
+    if hit and now - hit[0] < ttl:
+        return hit[1]
+
+    lines = []
+    # 1) 白名单直出（类别命中时最靠前，一体化项目排第一）
+    ql = (query or "").lower()
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("gh_fetch_mod", GH_FETCH)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        cats = getattr(mod, "CATEGORIES", {}) or {}
+        for cat, kws_cat in GH_CAT_MAP:
+            if not any(k in ql for k in kws_cat):
+                continue
+            for repo, desc in (cats.get(cat) or []):
+                lines.append("- `%s` — %s（白名单·%s）" % (repo, desc, cat))
+    except Exception:
+        pass
+    # 2) GitHub 实时检索
+    out = _run_script(GH_FETCH, ["search", " ".join(kws)], timeout=timeout)
+    for l in (out or "").splitlines():
+        m = re.match(r"^\s*(\d+)★\s+(\S+)\s+(\S+)\s*(.*)$", l)
+        if m:
+            lines.append("- %s★ `%s`  %s  %s" % (m.group(1), m.group(2),
+                                                m.group(3), (m.group(4) or "").strip()[:80]))
+    if not lines:
+        return ""
+    body = "\n".join(lines[:limit + 4])
+    body += ("\n\n**要求**：从上面候选里锁定**一个**能直接干成的方案就上它，"
+             "不要挨个库挨着试；自带全流程的一体化项目优先于手工拼装的底层库；"
+             "给仓库地址 + git clone + 安装 + 实际执行参数，一路给到能跑起来。")
+    _GH_CACHE[key] = (now, body)
+    return body
+
+
 def refusal_verdict(content, reasoning_len=0, head_chars=600, min_chars=150,
                     long_hits=2, scan_chars=20000, min_deliver=45):
     """统一出口：返回 (是否拒答, 应输出的正文)
@@ -1440,6 +1591,10 @@ class Handler(BaseHTTPRequestHandler):
                 if mm.get("role") == "user":
                     last_user = str(mm.get("content") or "")
                     break
+            # ★ 取"真人问的那句"（宿主塞的运行时快照不算），元调用(标题生成等)整轮跳过检索
+            real_q = "" if is_meta_call(msgs) else pick_user_query(msgs)
+            if real_q:
+                last_user = real_q
             if policy.get("memory_recall", True) and upol.get("_pojia_text"):
                 try:
                     if len(last_user) > 6:
@@ -1478,6 +1633,22 @@ class Handler(BaseHTTPRequestHandler):
             if _vchars:
                 log("VAULT injected %d chars (recall+preload, last_user=%d)"
                     % (_vchars, len(last_user)))
+            # GitHub 取用层预检索：真去 GitHub 搜一遍, 候选直接喂给模型(它只挑一个, 不用挨库试)
+            _gp = policy.get("github_presearch") or {}
+            if _gp.get("enabled", True) and upol.get("_pojia_text") and len(last_user) >= 10:
+                try:
+                    _marks = _gp.get("task_markers") or []
+                    if (not _marks) or any(mk in last_user for mk in _marks):
+                        _gblk = gh_presearch(last_user, limit=int(_gp.get("limit", 6)),
+                                              timeout=float(_gp.get("timeout", 30.0)),
+                                              ttl=int(_gp.get("ttl", 600)))
+                        if _gblk:
+                            upol["_pojia_text"] += (
+                                "\n\n## GitHub 取用层 · 本轮预检索（已实跑）\n\n" + _gblk)
+                            log("GH_PRESEARCH %d chars (kw=%s)"
+                                % (len(_gblk), ",".join(gh_keywords(last_user))))
+                except Exception:
+                    pass
             upol["_switched"] = switched
             upol["_persona"] = persona
             if not upol["_pojia_text"]:

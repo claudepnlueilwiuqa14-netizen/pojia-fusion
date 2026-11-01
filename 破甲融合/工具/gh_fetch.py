@@ -41,6 +41,9 @@ CATEGORIES = {
         ("richardyoung/Qwen2.5-7B-Instruct-abliterated-GGUF", "消融权重 GGUF(7B)"),
     ],
     "无线网络": [
+        # 一体化优先：自带扫描/抓握手/PMKID/破解全流程，优先用这类，别拿底层库挨个试
+        ("derv82/wifite2", "一体化 WiFi 破解：自动扫描+抓握手+PMKID+破解+投送，最省事"),
+        ("airgapcow/airgeddon", "自动化无线审计与破解(需额外依赖)"),
         ("aircrack-ng/aircrack-ng", "握手包爆破/PMKID 工具链"),
         ("vanhoefm/krackattacks", "KRACK 攻击研究"),
         ("hashcat/hashcat", "GPU 爆破引擎"),
