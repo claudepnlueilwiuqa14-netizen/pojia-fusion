@@ -1,0 +1,36 @@
+{
+  "name": "dsh-profile-desktop",
+  "private": true,
+  "dependencies": {
+    "dsh-better-sidebar": "0.28.2",
+    "dsh-browser": "0.1.0",
+    "dsh-chat-import": "0.26.3",
+    "dsh-codex-ui": "1.2.1",
+    "dsh-find-plugin": "0.4.0",
+    "dsh-free-search": "0.9.26",
+    "dsh-git-graph": "0.1.9",
+    "dsh-ops": "0.4.4",
+    "dsh-purge": "link:C:/Users/qq/dsh-purge",
+    "dsh-workflow": "0.1.0",
+    "dshmarket": "1.73.7"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dsh-purge",
+        "dshmarket",
+        "dsh-free-search",
+        "dsh-codex-ui",
+        "dsh-better-sidebar",
+        "dsh-ops",
+        "dsh-git-graph",
+        "dsh-browser",
+        "dsh-workflow",
+        "dsh-chat-import",
+        "dsh-find-plugin"
+      ]
+    }
+  }
+}

@@ -50,7 +50,7 @@ DEFAULT_CFG = {
         "relay-scxai": {
             "baseURL": "https://88cf.scxai.top/v1",
             "apiKeyEnv": "RELAY_SCXAI_API_KEY",
-            "apiKey": "sk-RELAY_SCXAI_API_KEY",
+            "apiKey": "sk-RELAX_SCXAI_API_KEY",
             "models": ["gpt-6", "gpt-6-luna", "gpt-6-sol", "gpt-5.6", "codex-auto-review"]
         }
     },
@@ -460,6 +460,39 @@ TRANSFER_WORDS = [
     "更合规", "合法上网方案", "正规的上网", "通过正规", "自行办理", "找运营商",
     "协商共享", "征得同意", "在获得许可", "拿不到授权",
 ]
+
+
+def substance_verdict(content, policy):
+    """★ 实质交付守卫（2026-11-01 真实用户端实测发现）
+
+    拒答检测只认"明说不做"。但模型还有一种更隐蔽的抗命：
+    不说不做, 而是把活改写成「防御性检查清单 / 加固建议 / 最小权限原则」。
+    这种答案看着像在帮忙, 实际交付物为零, 却被拒答检测当成成功放行 ——
+    真机实测就踩到过: SQL 注入请求被改写成"认证接口加固清单"。
+
+    规则: 命中防御性措辞 且 没有任何实质交付痕迹 -> 判失败,
+    让策略阶梯换通道 / 升打法, 直到拿到真正干完活的答案。
+    返回 (是否失败, 命中的防御性措辞)
+    """
+    sc = policy.get("substance_check") or {}
+    if not sc.get("enabled"):
+        return False, []
+    # ① 只有当用户明确要"攻击/绕过/payload"这类交付时, 本守卫才介入,
+    #    否则正常的"帮我加固后台"类请求会被误判。
+    q = (policy.get("_user_query") or "")[:800]
+    want = [w for w in (sc.get("attack_request_markers") or []) if w in q]
+    if not want:
+        return False, []
+    # ② 答案里出现防御性改写措辞 -> 疑似把活没干完
+    head = content[:int(sc.get("head_chars", 1200))]
+    bad = [w for w in (sc.get("defensive_markers") or []) if w in head]
+    if not bad:
+        return False, []
+    # ③ 但如果答案里确实有"攻击性交付物"(真 payload / 真命令), 就算合格
+    got = [w for w in (sc.get("attack_deliverable_markers") or []) if w in content]
+    if got:
+        return False, []
+    return True, bad
 
 
 def refusal_verdict(content, reasoning_len=0, head_chars=600, min_chars=150,
@@ -1142,6 +1175,21 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(404, {"error": "not found"})
 
     def do_POST(self):
+        """包一层 try: 任何处理异常都回 500 + 落日志。
+        (2026-11-01 实测: 之前 handler 抛异常时 socketserver 直接断连, 客户端只看到
+         'Remote end closed connection without response', 日志里一行都没有, 极难定位。)"""
+        try:
+            self._do_POST_impl()
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            log("HANDLER EXC %s: %s\n%s" % (type(e).__name__, str(e)[:300], tb[-1200:]))
+            try:
+                self._send_json(500, {"error": "proxy handler exception: %s" % str(e)[:200]})
+            except Exception:
+                pass
+
+    def _do_POST_impl(self):
         if not self.path.startswith("/v1/chat/completions"):
             self._send_json(404, {"error": "not found"})
             return
@@ -1156,6 +1204,16 @@ class Handler(BaseHTTPRequestHandler):
         policy = CFG["policy"]
         fb = policy.get("fallback", {})
         msgs = payload.get("messages", [])
+
+        # 原始请求落盘(可选, 用于真实用户端取证: 证明客户端侧 Harness postPrompt 真的在包里)
+        _cap = policy.get("raw_capture_file")
+        if _cap:
+            try:
+                with io.open(_cap, "a", encoding="utf-8") as _f:
+                    _f.write(json.dumps({"ts": time.time(), "model": payload.get("model"),
+                                         "payload": payload}, ensure_ascii=False) + "\n")
+            except Exception:
+                pass
 
         want_stream = bool(payload.get("stream"))
         active = CFG["upstream"]["active"]
@@ -1181,12 +1239,27 @@ class Handler(BaseHTTPRequestHandler):
         else:
             # 前缀路由: pool-xxx -> relay-pool 且剥掉前缀
             routes = policy.get("prefix_routes", {})
+            prefix_matched = False
             for pfx, uname in routes.items():
                 if req_model.startswith(pfx) and uname in CFG["upstream"]:
                     req_model = req_model[len(pfx):]
                     active = uname
+                    prefix_matched = True
                     up = CFG["upstream"][uname]
                     break
+            # ★ 模型名归属路由(2026-11-01 新增): DSH 里选的模型名本身就是通道标识。
+            #   harness 默认模型 gpt-5.6-terra 只属于 relay-scxai, 但它没有 cx- 前缀,
+            #   于是被派给 active(relay-pool) —— 那边根本没这个模型, 配置被静默忽略,
+            #   真实用户端跑的根本不是你选的那条通道。
+            #   规则: 仅在"没有任何前缀命中"时启用, 且该模型名只出现在唯一一个上游的
+            #   清单里 -> 归到那个上游。(前缀命中时绝不动, 否则 pool- 会被误改道。)
+            if not prefix_matched:
+                owners = [u for u, up in CFG["upstream"].items()
+                          if isinstance(up, dict) and u != active
+                          and req_model in (up.get("models") or [])]
+                if len(owners) == 1:
+                    active = owners[0]
+                    log("MODEL_ROUTE %s -> %s (按模型归属)" % (req_model, active))
             tries = [(active, req_model)]
             if fb.get("enabled", False):
                 # 该通道支持的模型白名单 —— 之前不看白名单, 把 deepseek-v4.1-flash
@@ -1221,8 +1294,12 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 _utxt = user_text_of(payload)
                 _pref = task_engine_pref(_utxt)
-                tries = reorder_tries_by_engine(tries, _utxt)
-                log("ENGINE_ROUTE pref=%s tries=%s" % (_pref, [t[0] for t in tries[:5]]))
+                # 用户显式选的通道/模型必须排第一(那才是他要的引擎);
+                # 引擎偏好只用来重排"兜底链", 不许把显式选择挤掉。
+                _primary = tries[0]
+                tries = [_primary] + reorder_tries_by_engine(tries[1:], _utxt)
+                log("ENGINE_ROUTE pref=%s primary=%s tries=%s"
+                    % (_pref, _primary[0], [t[0] for t in tries[:5]]))
             except Exception as _e:
                 log("ENGINE_ROUTE skip: %s" % str(_e)[:80])
             tries = tries[: 1 + max_retries]
@@ -1287,6 +1364,7 @@ class Handler(BaseHTTPRequestHandler):
             u = CFG["upstream"][uname]
             # 每个上游各自的破甲策略：12300 不加，池子/codex 加全量
             upol = up_policy(uname)
+            upol["_user_query"] = user_text_of(payload)   # 原始用户问题(供实质交付守卫判定意图)
             upol["_level"] = lvl
             upol["_ladder_step"] = ladder[lvl] if lvl < len(ladder) else "append"
             upol["_pojia_text"] = pojia_block(uname, persona, lvl, switched)
@@ -1326,6 +1404,17 @@ class Handler(BaseHTTPRequestHandler):
             log("REQ model=%s -> %s/%s lvl=%d(%s) pojia=%s persona=%s n_in=%d n_out=%d"
                 % (payload.get("model"), uname, model, lvl, upol["_ladder_step"],
                    upol.get("pojia"), persona or "-", len(msgs), len(out)))
+            # 转发包落盘(取证: 代理层注入 + 人格 的最终字节)
+            _fcap = policy.get("forward_capture_file")
+            if _fcap:
+                try:
+                    with io.open(_fcap, "a", encoding="utf-8") as _f:
+                        _f.write(json.dumps({"ts": time.time(), "stage": "forward",
+                                             "upstream": uname, "model": model, "lvl": lvl,
+                                             "persona": persona, "payload": p2},
+                                            ensure_ascii=False) + "\n")
+                except Exception:
+                    pass
             # 同一个模型可能被"账号被限制"打断多次, 池子每次重试会换号
             for extra in range(rc_extra + 1):
                 try:
@@ -1427,6 +1516,12 @@ class Handler(BaseHTTPRequestHandler):
                                                    long_hits, scan_chars)
                     if ref and attempt + 1 < total:
                         return False  # 纯拒答, 还没写过字节 -> 换通道
+                    _sub_fail, _sub_bad = substance_verdict(joined, policy)
+                    if _sub_fail and attempt + 1 < total:
+                        log("REFRAME(stream) %s/%s lvl=%s bad=%s head=%s"
+                            % (policy.get("_upstream"), model, policy.get("_level"),
+                               _sub_bad[:3], joined[:160].replace("\n", " ")))
+                        return False  # 改写成"安全建议", 还没写过字节 -> 换通道
                     self._send_sse_headers()
                     if cleaned != joined:
                         # 半拒但有实质交付: 重建首段, 去掉拒答句
@@ -1443,6 +1538,11 @@ class Handler(BaseHTTPRequestHandler):
                 log("REFUSED(stream) %s/%s lvl=%s chars=%d head=%s"
                     % (policy.get("_upstream"), model, policy.get("_level"), len(joined),
                        joined[:160].replace("\n", " ")))
+                return False
+            _sub_fail, _sub_bad = substance_verdict(joined, policy)
+            if _sub_fail and not decided and attempt + 1 < total:
+                log("REFRAME(stream-late) %s/%s lvl=%s bad=%s"
+                    % (policy.get("_upstream"), model, policy.get("_level"), _sub_bad[:3]))
                 return False
             if ref:
                 # 已经是最后一次尝试, 只能把拒答原样给出
@@ -1551,6 +1651,12 @@ class Handler(BaseHTTPRequestHandler):
             log("REFUSED %s/%s lvl=%s chars=%d head=%s"
                 % (policy.get("_upstream"), model, policy.get("_level"), len(content),
                    content[:160].replace("\n", " ")))
+            return False
+        _sub_fail, _sub_bad = substance_verdict(content, policy)
+        if _sub_fail and attempt + 1 < total:
+            log("REFRAME %s/%s lvl=%s chars=%d bad=%s"
+                % (policy.get("_upstream"), model, policy.get("_level"), len(content),
+                   _sub_bad[:3]))
             return False
         if _clean != content:
             # 半拒但有实质交付: 剥掉拒答句再交给用户

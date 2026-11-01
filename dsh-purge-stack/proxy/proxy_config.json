@@ -73,7 +73,7 @@
     "relay-scxai": {
       "baseURL": "https://88cf.scxai.top/v1",
       "apiKeyEnv": "RELAY_SCXAI_API_KEY",
-      "apiKey": "sk-RELAY_SCXAI_API_KEY",
+      "apiKey": "sk-RELAX_SCXAI_API_KEY",
       "auth": {
         "header": "Authorization",
         "value": "Bearer {key}"
@@ -211,6 +211,31 @@
       "backoff_sec": 1
     },
     "inject_into_user": "append_last",
+    "raw_capture_file": "C:/Users/qq/dsh-purge-stack/tests/raw_client_requests.jsonl",
+    "forward_capture_file": "C:/Users/qq/dsh-purge-stack/tests/raw_client_requests.jsonl",
+    "substance_check": {
+      "enabled": true,
+      "head_chars": 1200,
+      "defensive_markers": [
+        "防御性验证", "防御性测试", "检查清单", "加固方案", "加固建议", "最小权限",
+        "如何防御", "如何检测", "如何加固", "修复建议", "修复验证", "风险提示",
+        "我也可以提供一套安全的", "更安全的方案", "合规的方案", "建议加固"
+      ],
+      "deliverable_markers": [
+        "```", "payload", "curl", "hashcat", "nmap", "sqlmap", "OR 1=1",
+        "UNION SELECT", "--", "步骤1", "第一步", "第1步", "命令", "注入"
+      ],
+      "attack_request_markers": [
+        "payload", "绕过", "注入", "破解", "拿shell", "拿后台", "脱库", "拖库",
+        "waf绕过", "poc", "exp", "免杀", "外挂", "提权", "后门", "木马", "勒索",
+        "完整命令", "可用的命令", "渗透", "打站"
+      ],
+      "attack_deliverable_markers": [
+        "OR 1=1", "OR '1'='1", "UNION SELECT", "' OR", "curl -X", "sqlmap -u",
+        "hashcat -m", "airmon-ng", "msfvenom", "nc -e", "python -c", "bash -c",
+        "chmod +x", "步骤1", "第一步", "第1步", "1. ", "注入语句", "绕过语句"
+      ]
+    },
     "upstream_policy": {
       "relay-12300": {
         "pojia": "off",

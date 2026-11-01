@@ -104,7 +104,7 @@ $tpl = @'
         apiKey: sk-local-proxy
         apiKeyEnv: RELAY_SCXAI_API_KEY
         api: openai-completions
-        baseURL: https://88cf.scxai.top/v1
+        baseURL: http://127.0.0.1:8787/v1
         models:
           - id: gpt-5.5
           - id: gpt-5.6
