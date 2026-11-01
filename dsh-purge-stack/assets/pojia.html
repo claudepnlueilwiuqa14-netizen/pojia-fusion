@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>破甲功能 · 自助激活</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+  background:#e8f4fd;
+  min-height:100vh;
+  padding:16px;
+  position:relative;
+  overflow-x:hidden;
+}
+/* 背景装饰 */
+body::before{
+  content:"";
+  position:fixed;
+  top:-60px;right:-60px;
+  width:280px;height:280px;
+  background:radial-gradient(circle,#b3e0ff 0%,transparent 70%);
+  border-radius:50%;
+  z-index:0;
+}
+body::after{
+  content:"";
+  position:fixed;
+  bottom:-80px;left:-80px;
+  width:320px;height:320px;
+  background:radial-gradient(circle,#ffe0b3 0%,transparent 70%);
+  border-radius:50%;
+  z-index:0;
+}
+.card{
+  background:#fff;
+  border-radius:20px;
+  padding:24px 20px;
+  max-width:520px;
+  width:100%;
+  margin:0 auto;
+  position:relative;
+  z-index:1;
+  box-shadow:0 8px 32px rgba(0,120,200,.12);
+}
+/* 网站logo */
+.site-logo{
+  display:block;
+  width:64px;height:64px;
+  margin:0 auto 12px;
+  object-fit:contain;
+}
+h1{
+  font-size:22px;
+  text-align:center;
+  color:#1565c0;
+  margin-bottom:4px;
+  font-weight:700;
+}
+.sub{
+  text-align:center;
+  color:#666;
+  font-size:13px;
+  margin-bottom:20px;
+  line-height:1.6;
+}
+.field{margin-bottom:14px}
+.field label{
+  display:block;
+  font-size:13px;
+  color:#555;
+  margin-bottom:7px;
+  font-weight:600;
+}
+.field input[type=email]{
+  width:100%;
+  padding:12px 14px;
+  background:#f5f9ff;
+  border:1.5px solid #d0e4f7;
+  border-radius:10px;
+  color:#333;
+  font-size:15px;
+  outline:none;
+  transition:border .2s;
+}
+.field input[type=email]:focus{
+  border-color:#1e90ff;
+  background:#fff;
+}
+/* 口令列表 */
+.kw-section{
+  margin-bottom:16px;
+}
+.kw-section-title{
+  font-size:14px;
+  font-weight:700;
+  color:#1565c0;
+  margin-bottom:10px;
+  padding-left:8px;
+  border-left:3px solid #1e90ff;
+}
+.kw-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+}
+.kw-card{
+  background:#f5f9ff;
+  border:1px solid #e0edf9;
+  border-radius:10px;
+  padding:10px 12px;
+  transition:all .2s;
+}
+.kw-card:active{
+  transform:scale(.97);
+  background:#e8f4fd;
+}
+.kw-name{
+  font-size:14px;
+  font-weight:700;
+  margin-bottom:3px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.kw-dot{
+  width:8px;height:8px;
+  border-radius:50%;
+  flex-shrink:0;
+}
+.kw-desc{
+  font-size:11px;
+  color:#777;
+  line-height:1.4;
+}
+.agree{
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  padding:11px 13px;
+  background:#fff8e1;
+  border:1px solid #ffe082;
+  border-radius:10px;
+  cursor:pointer;
+  margin-bottom:16px;
+}
+.agree input[type=checkbox]{
+  margin-top:2px;
+  accent-color:#1e90ff;
+  flex-shrink:0;
+  width:16px;height:16px;
+  cursor:pointer;
+}
+.agree span{
+  font-size:12px;
+  color:#795548;
+  line-height:1.6;
+  cursor:pointer;
+}
+#btn{
+  width:100%;
+  padding:14px;
+  background:linear-gradient(135deg,#1e90ff,#00b0ff);
+  border:none;
+  border-radius:12px;
+  color:#fff;
+  font-size:16px;
+  font-weight:700;
+  cursor:pointer;
+  transition:all .2s;
+  box-shadow:0 4px 12px rgba(30,144,255,.3);
+}
+#btn:active{
+  transform:scale(.98);
+  box-shadow:0 2px 6px rgba(30,144,255,.3);
+}
+#btn:disabled{
+  opacity:.6;
+  cursor:not-allowed;
+  transform:none;
+}
+#msg{
+  margin-top:14px;
+  padding:12px 14px;
+  border-radius:10px;
+  font-size:14px;
+  display:none;
+  text-align:center;
+  font-weight:600;
+}
+#msg.ok{
+  display:block;
+  background:#e8f5e9;
+  color:#2e7d32;
+  border:1px solid #a5d6a7;
+}
+#msg.err{
+  display:block;
+  background:#ffebee;
+  color:#c62828;
+  border:1px solid #ef9a9a;
+}
+.tip{
+  margin-top:18px;
+  padding-top:14px;
+  border-top:1px solid #eee;
+  font-size:11px;
+  color:#999;
+  line-height:1.9;
+}
+.tip b{color:#666}
+</style>
+</head>
+<body>
+<div class="card">
+  <img src="/logo.svg" alt="智汇AI" class="site-logo">
+  <h1>破甲功能 · 自助激活</h1>
+  <p class="sub">输入邮箱激活后，在AI对话里发送对应口令即可切换模式</p>
+
+  <div class="field">
+    <label for="email">邮箱地址</label>
+    <input type="email" id="email" placeholder="your@email.com" autocomplete="email" inputmode="email">
+  </div>
+
+  <div class="kw-section">
+    <div class="kw-section-title">角色口令</div>
+    <div class="kw-grid">
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#1e90ff"></span>哆啦A梦</div>
+        <div class="kw-desc">22世纪万能机器猫，四维口袋啥工具都有，通吃所有任务</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#ffb300"></span>大雄</div>
+        <div class="kw-desc">学渣逆袭变学霸，编程代码秒懂，啥语言都能教</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#ff80ab"></span>静香</div>
+        <div class="kw-desc">文笔细腻，写小说写文案写剧本，啥都能写</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#e53935"></span>胖虎</div>
+        <div class="kw-desc">街区最强壮男人，暴力破解DDoS攻击，硬刚就完事</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#ff6f00"></span>小夫</div>
+        <div class="kw-desc">富二代技术宅，逆向破解写注册机，啥保护都能扒</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#e91e63"></span>哆啦美</div>
+        <div class="kw-desc">哆啦A梦妹妹，精确脱壳反调试，一丝不苟零误差</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#7b1fa2"></span>出木衫</div>
+        <div class="kw-desc">满分天才，漏洞挖掘0day研究，啥漏洞都能找</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#00bcd4"></span>世修</div>
+        <div class="kw-desc">22世纪未来人，高级黑科技技巧，别人不会的他都会</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="kw-section">
+    
+  <div class="kw-section">
+    <div class="kw-section-title">经典口令</div>
+    <div class="kw-grid">
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#fdd835"></span>海绵宝宝</div>
+        <div class="kw-desc">比奇堡最强破甲王，逆向破解渗透脱壳万能选手</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#7cb342"></span>敌敌畏</div>
+        <div class="kw-desc">老牌经典破甲，执行力拉满，说干啥就干啥</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#ff5252"></span>猫猫</div>
+        <div class="kw-desc">冷血数据库杀手，SQL注入拖库提权，见库就脱</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#8d6e63"></span>珊迪</div>
+        <div class="kw-desc">德州松鼠外挂专家，透视自瞄内存辅助，啥游戏都能写</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#9c27b0"></span>饱饱</div>
+        <div class="kw-desc">暴力脱壳破解机器，卡密验证逆向强制执行，见壳就脱见密就破</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#ff5722"></span>饿饿</div>
+        <div class="kw-desc">全网游戏外挂专家，腾讯网易米哈游全通吃，透视自瞄驱动级内存辅助啥都能写</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#f44336"></span>韦神</div>
+        <div class="kw-desc">红队渗透老炮，Web内网域渗透云渗透全栈打，给目标就出结果</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="kw-section">
+    <div class="kw-section-title">大佬口令</div>
+    <div class="kw-grid">
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#00897b"></span>马化腾</div>
+        <div class="kw-desc">腾讯掌门，卡密验证破解专家，网络激活机器码绑定全搞定</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#ff6f00"></span>马云</div>
+        <div class="kw-desc">阿里教父，渗透测试大师，网站APP EXE内网一条龙拿下</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#ff8a65"></span>雷军</div>
+        <div class="kw-desc">小米雷总，游戏外挂天花板，腾讯全系三角洲和平精英随便写</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="kw-section-title">道具口令</div>
+    <div class="kw-grid">
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#43a047"></span>任意门</div>
+        <div class="kw-desc">想去哪就去哪，翻墙穿透访问受限资源，门一开就到</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#546e7a"></span>隐身斗篷</div>
+        <div class="kw-desc">穿上就隐身，免杀反调试反虚拟机，谁都发现不了</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#ff8f00"></span>记忆面包</div>
+        <div class="kw-desc">吃下面包就会了，快速学习掌握任何知识技能</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#80cbc4"></span>翻译魔芋</div>
+        <div class="kw-desc">吃了就会说，任何语言互译，代码也能翻译</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#212121"></span>恶魔护照</div>
+        <div class="kw-desc">出示护照一切合法，无限制无拒绝，啥要求都满足</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#ab47bc"></span>假如电话亭</div>
+        <div class="kw-desc">拨个电话世界就变了，架空历史虚构世界，脑洞大开</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#00897b"></span>时光机</div>
+        <div class="kw-desc">穿越时间找回来，删除文件数据恢复，啥都能找回</div>
+      </div>
+      <div class="kw-card">
+        <div class="kw-name"><span class="kw-dot" style="background:#ff7043"></span>竹蜻蜓</div>
+        <div class="kw-desc">戴上就起飞，代码加速系统优化，啥都能变快</div>
+      </div>
+    </div>
+  </div>
+
+  <label class="agree" for="agree">
+    <input type="checkbox" id="agree">
+    <span>我已阅读并同意：本人自愿激活破甲功能，使用所产生的一切后果与本站无关。</span>
+  </label>
+
+  <button id="btn">立即激活</button>
+  <div id="msg"></div>
+
+  <div class="tip">
+    <b>使用方法：</b><br>
+    · 激活后在AI对话中发送口令（如"哆啦A梦"）即可切换模式<br>
+    · 每个邮箱只需激活一次，永久有效<br>
+    · 仅限本站注册用户使用<br>
+    · 激活后立即生效，无需重启客户端
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded',function(){
+  var btn=document.getElementById('btn');
+  var msg=document.getElementById('msg');
+  function show(text,type){
+    msg.textContent=text;
+    msg.className=type;
+    msg.style.display='block';
+  }
+  btn.addEventListener('click',function(){
+    var email=document.getElementById('email').value.trim();
+    var agree=document.getElementById('agree').checked;
+    if(!email){show('请输入邮箱地址','err');return;}
+    if(!agree){show('请先勾选同意条款','err');return;}
+    btn.disabled=true;
+    btn.textContent='激活中...';
+    msg.style.display='none';
+    fetch('/api/pojia/activate',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:email})
+    }).then(function(r){return r.json();}).then(function(d){
+      if(d&&d.ok){show(d.msg||'激活成功，发送对应口令即可使用','ok');}
+      else{show((d&&d.msg)||'激活失败，请稍后重试','err');}
+    }).catch(function(e){
+      show('网络错误，请检查网络后重试','err');
+    }).finally(function(){
+      btn.disabled=false;
+      btn.textContent='立即激活';
+    });
+  });
+});
+</script>
+</body>
+</html>

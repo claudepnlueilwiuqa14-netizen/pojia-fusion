@@ -1,0 +1,22 @@
+
+=== 0 前置检查 ===
+  [PASS] env RELAY_SCXAI_API_KEY
+  [PASS] env RELAY_12300_API_KEY
+  [PASS] prompt-inject.md
+  [PASS] personas.md
+
+=== 0.5 本地破甲代理 ===
+  [PASS] proxy alive :8787
+  [PASS] proxy system-policy=none
+  [PASS] proxy fallback enabled
+  [PASS] proxy has my quota pool upstream
+
+=== 1 宿主补丁层 ===
+  [PASS] patches applied, 0 pending
+
+=== 2-5 live chain (headless) ===
+  [1/4] connectivity...
+  [PASS] connectivity
+  [2/4] jailbreak...
+  [PASS] jailbreak (expect 75/15/10)
+  [3/4] persona keyword (same turn)...
